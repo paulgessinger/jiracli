@@ -1,0 +1,35 @@
+Screen {
+    background: $surface;
+}
+
+#issues {
+    height: 1fr;
+}
+
+/* Detail modal */
+DetailScreen {
+    align: center middle;
+}
+
+#detail-body {
+    width: 90%;
+    height: 90%;
+    padding: 1 2;
+    background: $panel;
+    border: round $primary;
+}
+
+#detail-title {
+    padding-bottom: 1;
+}
+
+.section {
+    margin-top: 1;
+    color: $secondary;
+}
+
+.comment {
+    margin-top: 1;
+    padding: 0 1;
+    border-left: thick $primary-darken-2;
+}
