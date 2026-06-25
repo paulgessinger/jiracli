@@ -65,8 +65,8 @@ cursor. `m` marks the current row plus everything older than it (lower in the
 list) as read.
 
 In the detail view, `j`/`k` scroll, `Ctrl+D`/`Ctrl+U` page down/up, `g`/`G` jump
-to top/bottom, `o` opens the browser, and `esc`/`q` goes back. Comments are shown
-newest-first.
+to top/bottom, `o` opens the browser, and `esc`/`q`/`h` goes back. Comments are
+shown newest-first.
 
 ## Configuration
 

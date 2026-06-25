@@ -23,7 +23,7 @@ class DetailScreen(ModalScreen[None]):
     """Fetches and shows a single issue. Opening it marks the issue read."""
 
     BINDINGS = [
-        Binding("escape,q", "dismiss", "Back"),
+        Binding("escape,q,h", "dismiss", "Back"),
         Binding("o", "open_browser", "Open in browser"),
         # vim-style scrolling
         Binding("j", "scroll_down", "Down", show=False),
