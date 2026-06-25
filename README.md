@@ -45,18 +45,21 @@ uv run jiracli configure
 
 ### Keys (TUI)
 
-| Key         | Action            |
-|-------------|-------------------|
-| ↑/↓ · `j`/`k` | Navigate        |
-| `g` / `G`   | Top / bottom      |
-| Enter · `l` | Open detail view  |
-| `o`         | Open in browser   |
-| `r`         | Mark read         |
-| `R`         | Refresh now       |
-| `q`         | Quit              |
+| Key             | Action            |
+|-----------------|-------------------|
+| ↑/↓ · `j`/`k`   | Navigate          |
+| `Ctrl+D`/`Ctrl+U` | Page down / up  |
+| `g` / `G`       | Top / bottom      |
+| Enter · `l`     | Open detail view  |
+| `o`             | Open in browser   |
+| `r`             | Mark read         |
+| `u`             | Mark unread       |
+| `R`             | Refresh now       |
+| `q`             | Quit              |
 
-In the detail view, `j`/`k` scroll, `g`/`G` jump to top/bottom, `o` opens the
-browser, and `esc`/`q` goes back. Comments are shown newest-first.
+In the detail view, `j`/`k` scroll, `Ctrl+D`/`Ctrl+U` page down/up, `g`/`G` jump
+to top/bottom, `o` opens the browser, and `esc`/`q` goes back. Comments are shown
+newest-first.
 
 ## Configuration
 

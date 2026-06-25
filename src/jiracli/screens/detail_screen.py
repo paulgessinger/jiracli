@@ -5,6 +5,7 @@ from __future__ import annotations
 import webbrowser
 from datetime import datetime, timezone
 
+from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -29,6 +30,8 @@ class DetailScreen(ModalScreen[None]):
         Binding("k", "scroll_up", "Up", show=False),
         Binding("g", "scroll_home", "Top", show=False),
         Binding("G", "scroll_end", "Bottom", show=False),
+        Binding("ctrl+d", "page_down", "Page down", show=False),
+        Binding("ctrl+u", "page_up", "Page up", show=False),
     ]
 
     def __init__(self, key: str, url: str, client: JiraClient, db: Database) -> None:
@@ -55,7 +58,9 @@ class DetailScreen(ModalScreen[None]):
             detail, raw = await self._client.get_issue(self._key)
         except JiraError as e:
             await self.query_one("#detail-loading").remove()
-            await body.mount(Static(f"[red]Failed to load issue:[/red] {e}"))
+            await body.mount(
+                Static(Text.assemble(("Failed to load issue: ", "red"), str(e)))
+            )
             return
         await self._db.save_raw(self._key, raw)
         await self.query_one("#detail-loading").remove()
@@ -63,24 +68,32 @@ class DetailScreen(ModalScreen[None]):
 
     async def _render_detail(self, body: VerticalScroll, detail: IssueDetail) -> None:
         s = detail.summary
+        title = Text.assemble((s.key, "bold"), "  ", s.summary)
+        meta1 = Text.assemble(
+            ("Status: ", "dim"), s.status,
+            ("   Type: ", "dim"), s.issuetype,
+            ("   Priority: ", "dim"), s.priority,
+        )
+        meta2 = Text.assemble(
+            ("Assignee: ", "dim"), s.assignee or "—",
+            ("   Reporter: ", "dim"), s.reporter or "—",
+        )
+        meta3 = Text.assemble(
+            ("Created: ", "dim"), absolute(s.created),
+            ("   Updated: ", "dim"), absolute(s.updated),
+        )
         widgets: list[Static] = [
-            Label(f"[b]{s.key}[/b]  {s.summary}", id="detail-title"),
-            Static(
-                f"[dim]Status:[/dim] {s.status}   "
-                f"[dim]Type:[/dim] {s.issuetype}   "
-                f"[dim]Priority:[/dim] {s.priority}"
-            ),
-            Static(
-                f"[dim]Assignee:[/dim] {s.assignee or '—'}   "
-                f"[dim]Reporter:[/dim] {s.reporter or '—'}"
-            ),
-            Static(
-                f"[dim]Created:[/dim] {absolute(s.created)}   "
-                f"[dim]Updated:[/dim] {absolute(s.updated)}"
-            ),
-            Static(f"[dim]{self._url}[/dim]"),
+            Label(title, id="detail-title"),
+            Static(meta1),
+            Static(meta2),
+            Static(meta3),
+            Static(Text(self._url, style="dim")),
             Label("[b]Description[/b]", classes="section"),
-            Static(detail.description or "[dim](no description)[/dim]"),
+            Static(
+                Text(detail.description)
+                if detail.description
+                else Text("(no description)", style="dim")
+            ),
         ]
         if detail.comments:
             widgets.append(Label("[b]Comments[/b]", classes="section"))
@@ -92,13 +105,11 @@ class DetailScreen(ModalScreen[None]):
                 reverse=True,
             )[:10]
             for c in recent:
-                widgets.append(
-                    Static(
-                        f"[cyan]{c.author}[/cyan] [dim]· {absolute(c.created)}[/dim]\n"
-                        f"{c.body}",
-                        classes="comment",
-                    )
+                header = Text.assemble(
+                    (c.author, "cyan"), (f" · {absolute(c.created)}", "dim"), "\n"
                 )
+                header.append(c.body)
+                widgets.append(Static(header, classes="comment"))
         await body.mount_all(widgets)
 
     def _body(self) -> VerticalScroll:
@@ -115,6 +126,14 @@ class DetailScreen(ModalScreen[None]):
 
     def action_scroll_end(self) -> None:
         self._body().scroll_end()
+
+    def action_page_down(self) -> None:
+        body = self._body()
+        body.scroll_relative(y=max(1, body.size.height // 2))
+
+    def action_page_up(self) -> None:
+        body = self._body()
+        body.scroll_relative(y=-max(1, body.size.height // 2))
 
     def action_dismiss(self) -> None:
         self.dismiss(None)

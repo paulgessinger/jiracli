@@ -28,6 +28,7 @@ class JiraTUI(App[None]):
         Binding("enter,l", "open_detail", "Open"),
         Binding("o", "open_browser", "Browser"),
         Binding("r", "mark_read", "Mark read"),
+        Binding("u", "mark_unread", "Mark unread"),
         Binding("R", "refresh_now", "Refresh"),
         Binding("q", "quit", "Quit"),
         # vim-style navigation (hidden from the footer to keep it tidy)
@@ -35,6 +36,8 @@ class JiraTUI(App[None]):
         Binding("k", "cursor_up", "Up", show=False),
         Binding("g", "cursor_top", "Top", show=False),
         Binding("G", "cursor_bottom", "Bottom", show=False),
+        Binding("ctrl+d", "page_down", "Page down", show=False),
+        Binding("ctrl+u", "page_up", "Page up", show=False),
     ]
 
     def __init__(self, settings: Settings) -> None:
@@ -65,7 +68,7 @@ class JiraTUI(App[None]):
             token = require_token()
         except RuntimeError as e:
             self.sub_title = "no token — run `jiracli configure`"
-            self.notify(str(e), severity="error", timeout=10)
+            self.notify(str(e), severity="error", timeout=10, markup=False)
             await self.refresh_table()
             return
 
@@ -116,7 +119,7 @@ class JiraTUI(App[None]):
         try:
             result = await sync_watched(self._client, self._db)
         except JiraError as e:
-            self.notify(f"Sync failed: {e}", severity="error", timeout=8)
+            self.notify(f"Sync failed: {e}", severity="error", timeout=8, markup=False)
             return
         await self.refresh_table()
         self.sub_title = (
@@ -179,6 +182,13 @@ class JiraTUI(App[None]):
         await self._db.mark_read(key)
         await self.refresh_table()
 
+    async def action_mark_unread(self) -> None:
+        key = self._current_key()
+        if key is None or self._db is None:
+            return
+        await self._db.mark_unread(key)
+        await self.refresh_table()
+
     async def action_refresh_now(self) -> None:
         self.run_sync()
 
@@ -195,6 +205,22 @@ class JiraTUI(App[None]):
         table = self.query_one("#issues", DataTable)
         if table.row_count:
             table.move_cursor(row=table.row_count - 1)
+
+    def _half_page(self) -> int:
+        table = self.query_one("#issues", DataTable)
+        return max(1, table.size.height // 2)
+
+    def action_page_down(self) -> None:
+        table = self.query_one("#issues", DataTable)
+        if table.row_count:
+            target = min(table.cursor_row + self._half_page(), table.row_count - 1)
+            table.move_cursor(row=target)
+
+    def action_page_up(self) -> None:
+        table = self.query_one("#issues", DataTable)
+        if table.row_count:
+            target = max(table.cursor_row - self._half_page(), 0)
+            table.move_cursor(row=target)
 
 
 def run(settings: Settings) -> None:

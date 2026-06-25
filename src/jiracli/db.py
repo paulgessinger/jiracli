@@ -193,6 +193,14 @@ class Database:
         )
         await self._conn.commit()
 
+    async def mark_unread(self, key: str) -> None:
+        """Clear the acknowledged state so the issue shows as unread again."""
+        await self._conn.execute(
+            "UPDATE issues SET read_updated = NULL, last_read_at = NULL WHERE key = ?",
+            (key,),
+        )
+        await self._conn.commit()
+
     async def save_raw(self, key: str, raw: dict) -> None:
         await self._conn.execute(
             "UPDATE issues SET raw_json = ? WHERE key = ?",
