@@ -12,7 +12,8 @@ at a glance, which ones have had new activity since you last read them.
 - **Unread** indicator (`●`) per issue; an issue becomes unread again whenever
   Jira activity changes its `updated` timestamp.
 - Detail view (description + recent comments) and "open in browser".
-- Background polling (default every 60s) re-flags issues with new activity.
+- Background polling (default every 60s) re-flags issues with new activity, and
+  sends a **desktop notification** when a previously-read issue gains activity.
 - An issue is considered **read** when you mark it read in the list, open its
   detail view, or open it in the browser.
 
@@ -88,3 +89,18 @@ shown newest-first.
 - Database: platform data dir, e.g. `~/.local/share/jiracli/jiracli.db`
   (macOS: `~/Library/Application Support/jiracli/`)
 - `JIRACLI_POLL_SECONDS` / `JIRACLI_URL` env vars override the config file.
+
+### Notifications
+
+When a watched issue you'd already read gains new activity during a background
+sync, jiracli sends a desktop notification (interactive actions and the first
+sync at startup never notify).
+
+Notifications use the **OSC 9 terminal escape sequence** (`ESC ] 9 ; … BEL`),
+which is understood by Ghostty, kitty, WezTerm and iTerm2. It needs no
+subprocess and works over SSH — the notification appears on the machine running
+the terminal emulator. Terminals without OSC 9 support simply ignore it.
+
+- `notifications = true|false` in `config.toml` — on/off switch.
+- Run **"Send test notification"** from the command palette (`Ctrl+P`) to verify
+  your setup; it warns if your terminal isn't a known OSC 9 one.

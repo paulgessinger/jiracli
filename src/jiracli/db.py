@@ -199,6 +199,14 @@ class Database:
             for r in rows
         ]
 
+    async def read_state(self) -> dict[str, tuple[str | None, str]]:
+        """Map of key -> (read_updated, updated) for all stored issues."""
+        cur = await self._conn.execute(
+            "SELECT key, read_updated, updated FROM issues"
+        )
+        rows = await cur.fetchall()
+        return {r["key"]: (r["read_updated"], r["updated"] or "") for r in rows}
+
     async def count_unread(self) -> int:
         cur = await self._conn.execute(
             """

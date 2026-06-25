@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     poll_seconds: int = Field(
         default=60, ge=10, description="Background poll interval in seconds"
     )
+    notifications: bool = Field(
+        default=True,
+        description="Send desktop notifications when watched issues gain activity",
+    )
 
     @field_validator("url")
     @classmethod
@@ -74,7 +78,7 @@ def load_settings() -> Settings:
     return Settings()
 
 
-def save_settings(url: str, poll_seconds: int) -> None:
+def save_settings(url: str, poll_seconds: int, notifications: bool = True) -> None:
     """Write the non-secret settings to ``config.toml`` and re-validate."""
     url = url.rstrip("/")
     path = config_file()
@@ -84,6 +88,7 @@ def save_settings(url: str, poll_seconds: int) -> None:
             data = tomllib.load(fh)
     data["url"] = url
     data["poll_seconds"] = poll_seconds
+    data["notifications"] = notifications
     with path.open("wb") as fh:
         tomli_w.dump(data, fh)
     # Re-validate by constructing Settings (raises if the file is now invalid).

@@ -6,17 +6,19 @@ import webbrowser
 
 from rich.text import Text
 from textual import work
-from textual.app import App, ComposeResult
+from textual.app import App, ComposeResult, SystemCommand
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, LoadingIndicator, Static
 
 from jiracli.config import Settings, require_token
 from jiracli.db import Database, IssueRow
 from jiracli.detail_view import build_detail_widgets
 from jiracli.jira_client import JiraClient, JiraError
+from jiracli.notify import emit_to_tty, osc9_sequence, osc_supported
 from jiracli.paths import db_file
-from jiracli.sync import sync_watched
+from jiracli.sync import SyncResult, sync_watched
 from jiracli.timeutil import relative
 
 UNREAD_DOT = "●"
@@ -60,6 +62,7 @@ class JiraTUI(App[None]):
         self._sidebar_visible: bool = False
         self._preview_key: str | None = None
         self._last_sync: str | None = None
+        self._did_initial_sync: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -185,6 +188,40 @@ class JiraTUI(App[None]):
         if self._sidebar_visible:
             self._preview_key = None  # reflect any new activity in the preview
             self._update_preview()
+        # Notify about new activity, but not on the very first (startup) sync,
+        # which would otherwise replay anything that changed while closed.
+        if not self._did_initial_sync:
+            self._did_initial_sync = True
+        elif self._settings.notifications:
+            self._notify_new_activity(result)
+
+    def _notify_new_activity(self, result: SyncResult) -> None:
+        issues = result.newly_unread
+        if not issues:
+            return
+        self.bell()
+        if len(issues) == 1:
+            i = issues[0]
+            message = f"{i.key}: {i.summary}"
+        else:
+            message = f"{len(issues)} watched issues have new activity"
+        self.notify(message, title="New activity", timeout=8, markup=False)
+        self._emit_notification(message, "jiracli — new activity")
+
+    def _emit_notification(self, message: str, title: str) -> None:
+        """Emit an OSC 9 desktop notification through the Textual driver.
+
+        Writing via the driver (rather than a separate /dev/tty handle) keeps the
+        sequence correctly ordered within Textual's output stream, so it isn't
+        swallowed or corrupted by a concurrently-rendered frame.
+        """
+        seq = osc9_sequence(message, title)
+        driver = getattr(self, "_driver", None)
+        if driver is not None:
+            driver.write(seq)
+            driver.flush()
+        else:
+            emit_to_tty(seq)
 
     # --- helpers ----------------------------------------------------------
 
@@ -367,6 +404,28 @@ class JiraTUI(App[None]):
 
     async def action_refresh_now(self) -> None:
         self.run_sync()
+
+    def get_system_commands(self, screen: Screen):
+        yield from super().get_system_commands(screen)
+        yield SystemCommand(
+            "Send test notification",
+            "Send a test desktop notification to verify they work",
+            self.action_test_notification,
+        )
+
+    def action_test_notification(self) -> None:
+        message = "Test notification from jiracli"
+        self.bell()
+        self.notify(message, title="jiracli", timeout=5, markup=False)
+
+        if not osc_supported():
+            self.notify(
+                "This terminal may not support OSC 9 notifications.",
+                severity="warning",
+                timeout=6,
+                markup=False,
+            )
+        self._emit_notification(message, "jiracli — test")
 
     def action_cursor_down(self) -> None:
         self.query_one("#issues", DataTable).action_cursor_down()

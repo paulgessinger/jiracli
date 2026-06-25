@@ -37,13 +37,18 @@ def configure(
         int,
         typer.Option(help="Background poll interval (seconds)."),
     ] = 60,
+    notifications: Annotated[
+        bool,
+        typer.Option(help="Desktop notifications on new activity."),
+    ] = True,
 ) -> None:
     """Store the Jira URL/interval and a Personal Access Token, then verify."""
     url = typer.prompt("Jira URL", default=url)
     token = typer.prompt("Personal Access Token", hide_input=True)
     poll_seconds = typer.prompt("Poll interval (seconds)", default=poll_seconds, type=int)
+    notifications = typer.confirm("Desktop notifications on new activity?", default=notifications)
 
-    save_settings(url, poll_seconds)
+    save_settings(url, poll_seconds, notifications)
     save_token(token)
     typer.echo(f"Saved config to {config_file()}")
 
