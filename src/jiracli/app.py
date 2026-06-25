@@ -31,6 +31,8 @@ class JiraTUI(App[None]):
         Binding("r", "mark_read", "Mark read"),
         Binding("u", "mark_unread", "Mark unread"),
         Binding("m", "mark_older_read", "Read ≤ here"),
+        Binding("f", "toggle_hide_read", "Hide read"),
+        Binding("c", "toggle_hide_closed", "Hide closed"),
         Binding("R", "refresh_now", "Refresh"),
         Binding("q", "quit", "Quit"),
         # vim-style navigation (hidden from the footer to keep it tidy)
@@ -50,6 +52,8 @@ class JiraTUI(App[None]):
         self._row_keys: list[str] = []
         self._rows: dict[str, IssueRow] = {}
         self._selected: set[str] = set()
+        self._hide_read: bool = False
+        self._hide_closed: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -67,6 +71,8 @@ class JiraTUI(App[None]):
         table.add_column("Summary", key="summary")
 
         self._db = await Database.connect(db_file())
+        self._hide_read = await self._db.get_meta("hide_read") == "1"
+        self._hide_closed = await self._db.get_meta("hide_closed") == "1"
 
         try:
             token = require_token()
@@ -91,7 +97,9 @@ class JiraTUI(App[None]):
 
     async def refresh_table(self) -> None:
         assert self._db is not None
-        rows = await self._db.list_issues()
+        rows = await self._db.list_issues(
+            hide_read=self._hide_read, hide_closed=self._hide_closed
+        )
         table = self.query_one("#issues", DataTable)
         cursor = table.cursor_row
         scroll_y = table.scroll_offset.y
@@ -112,8 +120,17 @@ class JiraTUI(App[None]):
     def _update_subtitle(self) -> None:
         total = len(self._rows)
         unread = sum(1 for r in self._rows.values() if r.unread)
-        suffix = f" · {len(self._selected)} selected" if self._selected else ""
-        self.sub_title = f"{total} watched · {unread} unread{suffix}"
+        parts = [f"{total} shown", f"{unread} unread"]
+        if self._selected:
+            parts.append(f"{len(self._selected)} selected")
+        filters = []
+        if self._hide_read:
+            filters.append("read")
+        if self._hide_closed:
+            filters.append("closed")
+        if filters:
+            parts.append("hiding " + "+".join(filters))
+        self.sub_title = " · ".join(parts)
 
     def _render_row(self, row: IssueRow) -> tuple[Text, ...]:
         style = "bold" if row.unread else "dim"
@@ -150,11 +167,7 @@ class JiraTUI(App[None]):
             self.notify(f"Sync failed: {e}", severity="error", timeout=8, markup=False)
             return
         await self.refresh_table()
-        suffix = f" · {len(self._selected)} selected" if self._selected else ""
-        self.sub_title = (
-            f"{result.total} watched · {result.unread} unread{suffix} · "
-            f"synced {relative(result.synced_at)}"
-        )
+        self.sub_title += f" · synced {relative(result.synced_at)}"
 
     # --- helpers ----------------------------------------------------------
 
@@ -202,7 +215,7 @@ class JiraTUI(App[None]):
             return
         webbrowser.open(url)
         await self._db.mark_read(key)
-        self._set_unread(key, False)
+        await self._apply_read_change([key], unread=False)
 
     def _target_keys(self) -> list[str]:
         """Selected issues if any, otherwise the issue under the cursor."""
@@ -211,12 +224,19 @@ class JiraTUI(App[None]):
         key = self._current_key()
         return [key] if key is not None else []
 
-    def _set_unread(self, key: str, unread: bool) -> None:
-        """Update cached unread state and re-render that row in place."""
-        row = self._rows.get(key)
-        if row is not None:
-            row.unread = unread
-        self._update_row(key)
+    async def _apply_read_change(self, keys: list[str], unread: bool) -> None:
+        """Reflect a read/unread change: update rows in place, or refresh if a
+        filter means their membership in the list may have changed."""
+        for key in keys:
+            row = self._rows.get(key)
+            if row is not None:
+                row.unread = unread
+        if self._hide_read:
+            await self.refresh_table()
+        else:
+            for key in keys:
+                self._update_row(key)
+            self._update_subtitle()
 
     async def action_mark_read(self) -> None:
         if self._db is None:
@@ -226,9 +246,7 @@ class JiraTUI(App[None]):
             return
         await self._db.mark_read_many(keys)
         self._selected.clear()
-        for key in keys:
-            self._set_unread(key, False)
-        self._update_subtitle()
+        await self._apply_read_change(keys, unread=False)
 
     async def action_mark_unread(self) -> None:
         if self._db is None:
@@ -239,9 +257,7 @@ class JiraTUI(App[None]):
         for key in keys:
             await self._db.mark_unread(key)
         self._selected.clear()
-        for key in keys:
-            self._set_unread(key, True)
-        self._update_subtitle()
+        await self._apply_read_change(keys, unread=True)
 
     async def action_mark_older_read(self) -> None:
         """Mark the selected issue and everything older (below it) as read."""
@@ -253,9 +269,19 @@ class JiraTUI(App[None]):
             return
         keys = self._row_keys[idx:]
         await self._db.mark_read_many(keys)
-        for key in keys:
-            self._set_unread(key, False)
-        self._update_subtitle()
+        await self._apply_read_change(keys, unread=False)
+
+    async def action_toggle_hide_read(self) -> None:
+        self._hide_read = not self._hide_read
+        if self._db is not None:
+            await self._db.set_meta("hide_read", "1" if self._hide_read else "0")
+        await self.refresh_table()
+
+    async def action_toggle_hide_closed(self) -> None:
+        self._hide_closed = not self._hide_closed
+        if self._db is not None:
+            await self._db.set_meta("hide_closed", "1" if self._hide_closed else "0")
+        await self.refresh_table()
 
     def action_toggle_select(self) -> None:
         key = self._current_key()

@@ -21,6 +21,7 @@ class IssueSummary:
     id: str
     summary: str
     status: str
+    status_category: str
     issuetype: str
     priority: str
     assignee: str
@@ -32,11 +33,18 @@ class IssueSummary:
     @classmethod
     def from_api(cls, raw: dict) -> "IssueSummary":
         fields = raw.get("fields", {}) or {}
+        status_obj = fields.get("status") or {}
+        status_category = ""
+        if isinstance(status_obj, dict):
+            category = status_obj.get("statusCategory") or {}
+            if isinstance(category, dict):
+                status_category = category.get("key") or ""
         return cls(
             key=raw.get("key", ""),
             id=str(raw.get("id", "")),
             summary=fields.get("summary") or "",
             status=_field_str(fields, "status"),
+            status_category=status_category,
             issuetype=_field_str(fields, "issuetype"),
             priority=_field_str(fields, "priority"),
             assignee=_field_str(fields, "assignee", sub="displayName"),

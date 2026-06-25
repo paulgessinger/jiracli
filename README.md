@@ -56,6 +56,8 @@ uv run jiracli configure
 | `r`             | Mark read (selection if any, else row)   |
 | `u`             | Mark unread (selection if any, else row) |
 | `m`             | Mark selected row **and older** as read  |
+| `f`             | Toggle hide **read** issues              |
+| `c`             | Toggle hide **closed** issues            |
 | `R`             | Refresh now                              |
 | `q`             | Quit                                     |
 
@@ -63,6 +65,11 @@ Select issues with `Space` (selected rows are highlighted), then `r`/`u` act on
 the whole selection at once. With no selection, `r`/`u` act on the row under the
 cursor. `m` marks the current row plus everything older than it (lower in the
 list) as read.
+
+`f` hides issues with no new activity (read), and `c` hides closed issues
+(Jira status category *done*). Both filters are **remembered between runs**
+(stored in the local database), and the active filters are shown in the title
+bar.
 
 In the detail view, `j`/`k` scroll, `Ctrl+D`/`Ctrl+U` page down/up, `g`/`G` jump
 to top/bottom, `o` opens the browser, and `esc`/`q`/`h` goes back. Comments are

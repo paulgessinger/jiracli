@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS issues (
     assignee       TEXT,
     reporter       TEXT,
     project        TEXT,
+    status_category TEXT,
     url            TEXT,
     created        TEXT,
     updated        TEXT,
@@ -54,6 +55,7 @@ class IssueRow:
     key: str
     summary: str
     status: str
+    status_category: str
     issuetype: str
     priority: str
     assignee: str
@@ -75,8 +77,17 @@ class Database:
         conn = await aiosqlite.connect(path)
         conn.row_factory = aiosqlite.Row
         await conn.executescript(SCHEMA)
+        await cls._migrate(conn)
         await conn.commit()
         return cls(conn)
+
+    @staticmethod
+    async def _migrate(conn: aiosqlite.Connection) -> None:
+        """Add columns introduced after the initial schema, if missing."""
+        cur = await conn.execute("PRAGMA table_info(issues)")
+        columns = {row[1] for row in await cur.fetchall()}
+        if "status_category" not in columns:
+            await conn.execute("ALTER TABLE issues ADD COLUMN status_category TEXT")
 
     async def close(self) -> None:
         await self._conn.close()
@@ -87,16 +98,19 @@ class Database:
         await self._conn.execute(
             """
             INSERT INTO issues (
-                key, id, summary, status, issuetype, priority, assignee,
-                reporter, project, url, created, updated, last_synced_at, watching
+                key, id, summary, status, status_category, issuetype, priority,
+                assignee, reporter, project, url, created, updated,
+                last_synced_at, watching
             ) VALUES (
-                :key, :id, :summary, :status, :issuetype, :priority, :assignee,
-                :reporter, :project, :url, :created, :updated, :now, 1
+                :key, :id, :summary, :status, :status_category, :issuetype,
+                :priority, :assignee, :reporter, :project, :url, :created,
+                :updated, :now, 1
             )
             ON CONFLICT(key) DO UPDATE SET
                 id            = excluded.id,
                 summary       = excluded.summary,
                 status        = excluded.status,
+                status_category = excluded.status_category,
                 issuetype     = excluded.issuetype,
                 priority      = excluded.priority,
                 assignee      = excluded.assignee,
@@ -118,6 +132,7 @@ class Database:
                 "assignee": issue.assignee,
                 "reporter": issue.reporter,
                 "project": issue.project,
+                "status_category": issue.status_category,
                 "url": url,
                 "created": issue.created,
                 "updated": issue.updated,
@@ -138,15 +153,28 @@ class Database:
     async def commit(self) -> None:
         await self._conn.commit()
 
-    async def list_issues(self) -> list[IssueRow]:
-        """Watched issues, newest activity first, with computed unread flag."""
+    async def list_issues(
+        self, hide_read: bool = False, hide_closed: bool = False
+    ) -> list[IssueRow]:
+        """Watched issues, newest activity first, with computed unread flag.
+
+        ``hide_read`` drops issues with no new activity; ``hide_closed`` drops
+        issues whose Jira status category is ``done``.
+        """
+        clauses = ["watching = 1"]
+        if hide_read:
+            clauses.append("(read_updated IS NULL OR read_updated <> updated)")
+        if hide_closed:
+            clauses.append("COALESCE(status_category, '') <> 'done'")
+        where = " AND ".join(clauses)
         cur = await self._conn.execute(
-            """
-            SELECT key, summary, status, issuetype, priority, assignee, reporter,
-                   project, url, updated, created, last_read_at,
+            f"""
+            SELECT key, summary, status, status_category, issuetype, priority,
+                   assignee, reporter, project, url, updated, created,
+                   last_read_at,
                    (read_updated IS NULL OR read_updated <> updated) AS unread
             FROM issues
-            WHERE watching = 1
+            WHERE {where}
             ORDER BY updated DESC
             """
         )
@@ -156,6 +184,7 @@ class Database:
                 key=r["key"],
                 summary=r["summary"] or "",
                 status=r["status"] or "",
+                status_category=r["status_category"] or "",
                 issuetype=r["issuetype"] or "",
                 priority=r["priority"] or "",
                 assignee=r["assignee"] or "",
