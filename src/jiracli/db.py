@@ -193,6 +193,17 @@ class Database:
         )
         await self._conn.commit()
 
+    async def mark_read_many(self, keys: list[str]) -> None:
+        """Acknowledge the current ``updated`` value for several issues."""
+        if not keys:
+            return
+        now = _now()
+        await self._conn.executemany(
+            "UPDATE issues SET read_updated = updated, last_read_at = ? WHERE key = ?",
+            [(now, key) for key in keys],
+        )
+        await self._conn.commit()
+
     async def mark_unread(self, key: str) -> None:
         """Clear the acknowledged state so the issue shows as unread again."""
         await self._conn.execute(

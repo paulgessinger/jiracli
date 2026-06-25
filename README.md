@@ -45,17 +45,24 @@ uv run jiracli configure
 
 ### Keys (TUI)
 
-| Key             | Action            |
-|-----------------|-------------------|
-| ↑/↓ · `j`/`k`   | Navigate          |
-| `Ctrl+D`/`Ctrl+U` | Page down / up  |
-| `g` / `G`       | Top / bottom      |
-| Enter · `l`     | Open detail view  |
-| `o`             | Open in browser   |
-| `r`             | Mark read         |
-| `u`             | Mark unread       |
-| `R`             | Refresh now       |
-| `q`             | Quit              |
+| Key             | Action                                   |
+|-----------------|------------------------------------------|
+| ↑/↓ · `j`/`k`   | Navigate                                 |
+| `Ctrl+D`/`Ctrl+U` | Page down / up                         |
+| `g` / `G`       | Top / bottom                             |
+| `Space`         | Toggle selection (multi-select)          |
+| Enter · `l`     | Open detail view                         |
+| `o`             | Open in browser                          |
+| `r`             | Mark read (selection if any, else row)   |
+| `u`             | Mark unread (selection if any, else row) |
+| `m`             | Mark selected row **and older** as read  |
+| `R`             | Refresh now                              |
+| `q`             | Quit                                     |
+
+Select issues with `Space` (selected rows are highlighted), then `r`/`u` act on
+the whole selection at once. With no selection, `r`/`u` act on the row under the
+cursor. `m` marks the current row plus everything older than it (lower in the
+list) as read.
 
 In the detail view, `j`/`k` scroll, `Ctrl+D`/`Ctrl+U` page down/up, `g`/`G` jump
 to top/bottom, `o` opens the browser, and `esc`/`q` goes back. Comments are shown
