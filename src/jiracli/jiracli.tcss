@@ -2,8 +2,27 @@ Screen {
     background: $surface;
 }
 
-#issues {
+#main {
     height: 1fr;
+}
+
+#issues {
+    width: 1fr;
+    height: 1fr;
+}
+
+/* Preview sidebar (right pane, toggleable) */
+#sidebar {
+    width: 45%;
+    height: 1fr;
+    padding: 1 2;
+    background: $panel;
+    border-left: round $primary;
+    display: none;
+}
+
+#sidebar.visible {
+    display: block;
 }
 
 /* Detail modal */
@@ -19,7 +38,7 @@ DetailScreen {
     border: round $primary;
 }
 
-#detail-title {
+.detail-title {
     padding-bottom: 1;
 }
 

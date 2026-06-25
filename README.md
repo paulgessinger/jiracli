@@ -58,6 +58,7 @@ uv run jiracli configure
 | `m`             | Mark selected row **and older** as read  |
 | `f`             | Toggle hide **read** issues              |
 | `c`             | Toggle hide **closed** issues            |
+| `s`             | Toggle the preview **sidebar**           |
 | `R`             | Refresh now                              |
 | `q`             | Quit                                     |
 
@@ -70,6 +71,12 @@ list) as read.
 (Jira status category *done*). Both filters are **remembered between runs**
 (stored in the local database), and the active filters are shown in the title
 bar.
+
+`s` toggles a preview **sidebar** on the right that shows the detail of whichever
+issue is currently highlighted, updating as you move the cursor. The sidebar is a
+read-only preview — unlike opening the modal detail view, hovering an issue in
+the sidebar does **not** mark it as read. Its visibility is also remembered
+between runs.
 
 In the detail view, `j`/`k` scroll, `Ctrl+D`/`Ctrl+U` page down/up, `g`/`G` jump
 to top/bottom, `o` opens the browser, and `esc`/`q`/`h` goes back. Comments are

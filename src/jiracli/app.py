@@ -8,10 +8,12 @@ from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import DataTable, Footer, Header
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import DataTable, Footer, Header, LoadingIndicator, Static
 
 from jiracli.config import Settings, require_token
 from jiracli.db import Database, IssueRow
+from jiracli.detail_view import build_detail_widgets
 from jiracli.jira_client import JiraClient, JiraError
 from jiracli.paths import db_file
 from jiracli.sync import sync_watched
@@ -33,6 +35,7 @@ class JiraTUI(App[None]):
         Binding("m", "mark_older_read", "Read ≤ here"),
         Binding("f", "toggle_hide_read", "Hide read"),
         Binding("c", "toggle_hide_closed", "Hide closed"),
+        Binding("s", "toggle_sidebar", "Sidebar"),
         Binding("R", "refresh_now", "Refresh"),
         Binding("q", "quit", "Quit"),
         # vim-style navigation (hidden from the footer to keep it tidy)
@@ -54,11 +57,15 @@ class JiraTUI(App[None]):
         self._selected: set[str] = set()
         self._hide_read: bool = False
         self._hide_closed: bool = False
+        self._sidebar_visible: bool = False
+        self._preview_key: str | None = None
+        self._last_sync: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        table: DataTable = DataTable(id="issues", cursor_type="row", zebra_stripes=True)
-        yield table
+        with Horizontal(id="main"):
+            yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
+            yield VerticalScroll(id="sidebar")
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -73,6 +80,8 @@ class JiraTUI(App[None]):
         self._db = await Database.connect(db_file())
         self._hide_read = await self._db.get_meta("hide_read") == "1"
         self._hide_closed = await self._db.get_meta("hide_closed") == "1"
+        self._sidebar_visible = await self._db.get_meta("sidebar") == "1"
+        self.query_one("#sidebar").set_class(self._sidebar_visible, "visible")
 
         try:
             token = require_token()
@@ -84,8 +93,11 @@ class JiraTUI(App[None]):
 
         self._client = JiraClient(self._settings.url, token)
         await self.refresh_table()
+        self._update_preview()
         self.run_sync()
         self.set_interval(self._settings.poll_seconds, self.run_sync)
+        # Keep the "synced Xs ago" label live between syncs.
+        self.set_interval(1.0, self._update_subtitle)
 
     async def on_unmount(self) -> None:
         if self._client is not None:
@@ -130,6 +142,8 @@ class JiraTUI(App[None]):
             filters.append("closed")
         if filters:
             parts.append("hiding " + "+".join(filters))
+        if self._last_sync is not None:
+            parts.append(f"synced {relative(self._last_sync)}")
         self.sub_title = " · ".join(parts)
 
     def _render_row(self, row: IssueRow) -> tuple[Text, ...]:
@@ -166,8 +180,11 @@ class JiraTUI(App[None]):
         except JiraError as e:
             self.notify(f"Sync failed: {e}", severity="error", timeout=8, markup=False)
             return
+        self._last_sync = result.synced_at
         await self.refresh_table()
-        self.sub_title += f" · synced {relative(result.synced_at)}"
+        if self._sidebar_visible:
+            self._preview_key = None  # reflect any new activity in the preview
+            self._update_preview()
 
     # --- helpers ----------------------------------------------------------
 
@@ -191,6 +208,45 @@ class JiraTUI(App[None]):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         # Enter on a row is consumed by DataTable as a selection event.
         self.action_open_detail()
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        # Update the preview sidebar as the cursor moves between rows.
+        if self._sidebar_visible:
+            self._update_preview()
+
+    # --- preview sidebar --------------------------------------------------
+
+    def _update_preview(self) -> None:
+        """Load the highlighted issue into the sidebar (if visible)."""
+        if not self._sidebar_visible or self._client is None:
+            return
+        key = self._current_key()
+        if key is None or key == self._preview_key:
+            return
+        self._preview_key = key
+        self._load_preview(key)
+
+    @work(exclusive=True, group="preview")
+    async def _load_preview(self, key: str) -> None:
+        if self._client is None or self._db is None:
+            return
+        sidebar = self.query_one("#sidebar", VerticalScroll)
+        await sidebar.remove_children()
+        await sidebar.mount(LoadingIndicator())
+        try:
+            detail, raw = await self._client.get_issue(key)
+        except JiraError as e:
+            await sidebar.remove_children()
+            await sidebar.mount(
+                Static(Text.assemble(("Failed to load issue: ", "red"), str(e)))
+            )
+            return
+        # The selection may have moved on while we were fetching.
+        if key != self._preview_key:
+            return
+        await self._db.save_raw(key, raw)
+        await sidebar.remove_children()
+        await sidebar.mount_all(build_detail_widgets(detail, self._client.browse_url(key)))
 
     # --- actions ----------------------------------------------------------
 
@@ -282,6 +338,19 @@ class JiraTUI(App[None]):
         if self._db is not None:
             await self._db.set_meta("hide_closed", "1" if self._hide_closed else "0")
         await self.refresh_table()
+
+    async def action_toggle_sidebar(self) -> None:
+        self._sidebar_visible = not self._sidebar_visible
+        if self._db is not None:
+            await self._db.set_meta("sidebar", "1" if self._sidebar_visible else "0")
+        sidebar = self.query_one("#sidebar", VerticalScroll)
+        sidebar.set_class(self._sidebar_visible, "visible")
+        if self._sidebar_visible:
+            self._preview_key = None  # force reload of the current row
+            self._update_preview()
+        else:
+            await sidebar.remove_children()
+            self._preview_key = None
 
     def action_toggle_select(self) -> None:
         key = self._current_key()
