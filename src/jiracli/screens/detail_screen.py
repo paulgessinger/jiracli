@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import webbrowser
+from datetime import datetime, timezone
 
 from textual import work
 from textual.app import ComposeResult
@@ -14,7 +15,7 @@ from textual.widgets import Footer, Label, LoadingIndicator, Static
 from jiracli.db import Database
 from jiracli.jira_client import JiraClient, JiraError
 from jiracli.models import IssueDetail
-from jiracli.timeutil import absolute
+from jiracli.timeutil import absolute, parse_jira_dt
 
 
 class DetailScreen(ModalScreen[None]):
@@ -23,6 +24,11 @@ class DetailScreen(ModalScreen[None]):
     BINDINGS = [
         Binding("escape,q", "dismiss", "Back"),
         Binding("o", "open_browser", "Open in browser"),
+        # vim-style scrolling
+        Binding("j", "scroll_down", "Down", show=False),
+        Binding("k", "scroll_up", "Up", show=False),
+        Binding("g", "scroll_home", "Top", show=False),
+        Binding("G", "scroll_end", "Bottom", show=False),
     ]
 
     def __init__(self, key: str, url: str, client: JiraClient, db: Database) -> None:
@@ -78,7 +84,14 @@ class DetailScreen(ModalScreen[None]):
         ]
         if detail.comments:
             widgets.append(Label("[b]Comments[/b]", classes="section"))
-            for c in detail.comments[-10:]:
+            recent = sorted(
+                detail.comments,
+                key=lambda c: parse_jira_dt(c.created) or datetime.min.replace(
+                    tzinfo=timezone.utc
+                ),
+                reverse=True,
+            )[:10]
+            for c in recent:
                 widgets.append(
                     Static(
                         f"[cyan]{c.author}[/cyan] [dim]· {absolute(c.created)}[/dim]\n"
@@ -87,6 +100,21 @@ class DetailScreen(ModalScreen[None]):
                     )
                 )
         await body.mount_all(widgets)
+
+    def _body(self) -> VerticalScroll:
+        return self.query_one("#detail-body", VerticalScroll)
+
+    def action_scroll_down(self) -> None:
+        self._body().scroll_down()
+
+    def action_scroll_up(self) -> None:
+        self._body().scroll_up()
+
+    def action_scroll_home(self) -> None:
+        self._body().scroll_home()
+
+    def action_scroll_end(self) -> None:
+        self._body().scroll_end()
 
     def action_dismiss(self) -> None:
         self.dismiss(None)

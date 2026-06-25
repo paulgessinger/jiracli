@@ -25,11 +25,16 @@ class JiraTUI(App[None]):
     TITLE = "jiracli"
 
     BINDINGS = [
-        Binding("enter", "open_detail", "Open"),
+        Binding("enter,l", "open_detail", "Open"),
         Binding("o", "open_browser", "Browser"),
         Binding("r", "mark_read", "Mark read"),
         Binding("R", "refresh_now", "Refresh"),
         Binding("q", "quit", "Quit"),
+        # vim-style navigation (hidden from the footer to keep it tidy)
+        Binding("j", "cursor_down", "Down", show=False),
+        Binding("k", "cursor_up", "Up", show=False),
+        Binding("g", "cursor_top", "Top", show=False),
+        Binding("G", "cursor_bottom", "Bottom", show=False),
     ]
 
     def __init__(self, settings: Settings) -> None:
@@ -176,6 +181,20 @@ class JiraTUI(App[None]):
 
     async def action_refresh_now(self) -> None:
         self.run_sync()
+
+    def action_cursor_down(self) -> None:
+        self.query_one("#issues", DataTable).action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        self.query_one("#issues", DataTable).action_cursor_up()
+
+    def action_cursor_top(self) -> None:
+        self.query_one("#issues", DataTable).move_cursor(row=0)
+
+    def action_cursor_bottom(self) -> None:
+        table = self.query_one("#issues", DataTable)
+        if table.row_count:
+            table.move_cursor(row=table.row_count - 1)
 
 
 def run(settings: Settings) -> None:
